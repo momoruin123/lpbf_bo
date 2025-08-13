@@ -1,0 +1,7 @@
+botorch==0.14.0
+gpytorch==1.14
+matplotlib==3.10.5
+numpy==2.3.2
+pandas==2.3.1
+pymoo==0.6.1.5
+torch==2.7.1+cpu

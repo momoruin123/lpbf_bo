@@ -111,7 +111,6 @@ def mechanical_model_1(x: torch.Tensor) -> Tensor:
     N = x.shape[0]
     noise = lambda scale: scale * torch.randn(N, dtype=x.dtype, device=x.device)
 
-    # --- 前面部分保持不变 ---
     label_visibility = 10 * torch.exp(-((outline - 160) / 50) ** 2) + noise(1.0)
     label_visibility = torch.clamp(label_visibility.round(), 0, 10)
 
@@ -122,10 +121,9 @@ def mechanical_model_1(x: torch.Tensor) -> Tensor:
 
     eff_density = (0.6 * power + 0.4 * outline) / (hatch + 1e-4)
 
-    # --- 修改后的 Young's modulus (MPa) ---
+    # --- Young's modulus (MPa) ---
     e1 = 800 * torch.exp(-((eff_density - 800) / 150) ** 2)
     e2 = 600 * torch.exp(-((eff_density - 1600) / 200) ** 2)
-    # 新增两项：让 E 与前面两个标签相关（系数可调）
     E = (
             1200
             + e1
@@ -136,25 +134,23 @@ def mechanical_model_1(x: torch.Tensor) -> Tensor:
     )
     E = torch.clamp(E, 1000, 3000)
 
-    # --- 修改后的 tensile_strength (MPa) ---
+    # --- tensile_strength (MPa) ---
     strength = (
             45
             + 10 * torch.exp(-((eff_density - 1000) / 150) ** 2)
             + 5 * torch.exp(-((eff_density - 1800) / 200) ** 2)
             + 5 * torch.sin((eff_density % 500) * 0.01)
-            # 新增标签依赖
             + 2.0 * label_visibility
             + 1.5 * surface_uniformity
             + noise(5)
     )
     strength = torch.clamp(strength, 30, 80)
 
-    # --- 修改后的 elongation (%) ---
+    # --- elongation (%) ---
     elongation = (
             2.0
             + 2.5 * torch.exp(-((eff_density - 900) / 150) ** 2)
             + 1.5 * torch.exp(-((eff_density - 1700) / 180) ** 2)
-            # 新增标签依赖
             + 0.2 * label_visibility
             + 0.1 * surface_uniformity
             + noise(0.2)
