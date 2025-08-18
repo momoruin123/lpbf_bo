@@ -13,13 +13,11 @@ from optimization.utils import run_multitask_bo, run_singletask_bo
 
 
 class WarmStartBO(BaseBO):
-    def __init__(self, input_dim, objective_dim, mode=None, seed=None, device=None):
+    def __init__(self, input_dim, objective_dim, seed=None, device=None):
         super().__init__(input_dim, objective_dim, seed, device)
         # source task X/Y init
         self.X_src = torch.empty((0, input_dim), device=self.device)
         self.Y_src = torch.empty((0, objective_dim), device=self.device)
-
-        self.warm_start_mode = mode
 
         if objective_dim == 1:
             self._is_single_task = True
