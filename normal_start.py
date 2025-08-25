@@ -1,7 +1,7 @@
 import torch
 from datetime import datetime
 
-from optimization import warm_start_bo_class
+from optimization import base_bo_class
 from optimization.utils import read_data, save_data, normalize_tensor
 
 
@@ -50,10 +50,6 @@ upper_bounds = [1, 1, 1, 1, 1]  # Upper bounds for each input dimension
 # Data dimensions (input parameters, raw objectives)
 data_dim = [5, 2]  # [number of processing parameters, number of raw product indicators]
 
-# Source task data configuration (for warm start)
-source_data_path = "./data/source_task_data.csv"  # Path to related source task data
-source_data_clm_name = None  # Column names for source data (None uses default ordering)
-
 # Target task initial samples (optional)
 has_sample = False  # Set to True if initial target task data is available
 target_data_path = "./data/target_task_data.csv"  # Path to target task data
@@ -66,14 +62,14 @@ minibatch_size = batch_size  # Typically matches batch_size unless memory constr
 
 # ======== Initialize and configure Warm Start BO ========
 # Create WarmStartBO instance with input and objective dimensions
-warm_start_BO = warm_start_bo_class.WarmStartBO(
+normal_start = base_bo_class.BaseBO(
     input_dim=input_dim,
     objective_dim=objective_dim
 )
 
 # Configure optimization bounds and batch sizes
-warm_start_BO.set_bounds(lower_bounds, upper_bounds)
-warm_start_BO.set_batch_size(batch_size, minibatch_size)
+normal_start.set_bounds(lower_bounds, upper_bounds)
+normal_start.set_batch_size(batch_size, minibatch_size)
 
 
 # ======== Load initial data ========
@@ -92,27 +88,14 @@ if has_sample:
     Y_target_cost = cost_func(Y_target_initial)
 
     # Add target data to BO (uses base class's add_data method)
-    warm_start_BO.add_data(X_target_initial, Y_target_cost)
-
-# Load source task data for warm start
-X_src, Y_src = read_data(
-    x_dim=data_dim[0],
-    y_dim=data_dim[1],
-    file_path=source_data_path,
-    x_cols=source_data_clm_name,
-    y_cols=source_data_clm_name
-)
-
-# Convert source objectives to cost metric
-Y_src_cost = cost_func(Y_src)
-
-# Add source data to warm start BO
-warm_start_BO.add_source_data(X_src, Y_src_cost)
-
+    normal_start.add_data(X_target_initial, Y_target_cost)
 
 # ======== Run Warm Start Bayesian Optimization ========
 # Generate next set of candidate points to evaluate
-X_next = warm_start_BO.run_bo()
+if has_sample:
+    X_next = normal_start.run_bo()
+else:
+    X_next = normal_start.run_start_sampling()
 
 
 # ======== Save results ========
@@ -121,5 +104,5 @@ timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 save_data(
     x=X_next,
     file_path="./result",  # Default save directory
-    file_name=f"{timestamp}_warm_start_bo_candidates"  # Base filename for results
+    file_name=f"{timestamp}_normal_bo_candidates"  # Base filename for results
 )

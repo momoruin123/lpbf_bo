@@ -1,4 +1,5 @@
 import torch
+from datetime import datetime
 
 from optimization import embedding_bo_class
 from optimization.utils import read_data, save_data, normalize_tensor
@@ -139,8 +140,10 @@ X_next = embedding_BO.run_bo()
 
 # ======== Save results ========
 # Save the recommended candidate points to CSV
+timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
 save_data(
     x=X_next,
     file_path="./result",  # Default save directory
-    file_name="bo_candidates"  # Base filename for the results
+    file_name=f"{timestamp}_embedding_bo_candidates"  # Base filename for the results
 )
