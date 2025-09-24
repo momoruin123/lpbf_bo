@@ -41,18 +41,26 @@ input_dim = 5  # Number of input dimensions (e.g., processing parameters to opti
 objective_dim = 1  # Dimension of the optimization target (1 for single-objective cost function)
 # Note: This matches the output dimension of the cost function, not the raw objectives
 
+# IF objective_dim = 1:
+#   we need cost function at the top of this file, but don't need slack (don't need reference point)
+# ELSE objective_dim > 1:
+#   need slack (don't need reference point)
+#   Slack for setting reference points
+slack = 0.1  # set same slack for each dimension
+# or slack = [0.1, 0.2, 0.3, 0.1, 0.5]  # set different slack for each dimension
+
 batch_size = 20  # Number of candidate points to generate in each BO iteration
 
 # Parameter bounds for the optimization space
 lower_bounds = [0, 0, 0, 0, 0]  # Lower bounds for each input dimension
 upper_bounds = [1, 1, 1, 1, 1]  # Upper bounds for each input dimension
 
+# ---------------------------- Optional: Target task initial samples ----------------------------
+has_sample = False  # Set to True if initial target task data is available
+# IF IT HAS SAMPLES (True):
+target_data_path = "./data/target_task_data.csv"  # Path to target task data
 # Data dimensions (input parameters, raw objectives)
 data_dim = [5, 2]  # [number of processing parameters, number of raw product indicators]
-
-# Target task initial samples (optional)
-has_sample = False  # Set to True if initial target task data is available
-target_data_path = "./data/target_task_data.csv"  # Path to target task data
 target_data_clm_name = None  # Column names for target data (None uses default ordering)
 
 # ---------------------------- Optional: Mini-batch configuration ----------------------------
@@ -84,17 +92,20 @@ if has_sample:
         y_cols=target_data_clm_name
     )
 
-    # Convert raw objectives to cost metric using the cost function
-    Y_target_cost = cost_func(Y_target_initial)
+    if objective_dim == 1:
+        # Convert raw objectives to cost metric using the cost function
+        Y_target_cost = cost_func(Y_target_initial)
+        normal_start.add_data(X_target_initial, Y_target_cost)
 
-    # Add target data to BO (uses base class's add_data method)
-    normal_start.add_data(X_target_initial, Y_target_cost)
+    else:
+        # Multi-task BO
+        Y_target_cost = Y_target_initial
+        normal_start.add_data(X_target_initial, Y_target_cost)
+        normal_start.set_ref_point(slack)
 
-# ======== Run Warm Start Bayesian Optimization ========
-# Generate next set of candidate points to evaluate
-if has_sample:
     X_next = normal_start.run_bo()
 else:
+    # Get random samples
     X_next = normal_start.run_start_sampling()
 
 

@@ -28,7 +28,7 @@ import random
 import torch
 import numpy as np
 
-from optimization.utils import generate_initial_data, run_multitask_bo
+from optimization.utils import generate_initial_data, run_multitask_bo, run_singletask_bo
 from models import SingleTaskGP_model
 
 
@@ -82,6 +82,9 @@ class BaseBO:
 
         # Gaussian Process model holder
         self.model = None
+
+        # Determine optimization type (single vs multi-objective)
+        self._is_single_task = (objective_dim == 1)
 
     def add_data(self, X_new, Y_new) -> None:
         """Append new observations to the existing training data.
@@ -145,21 +148,7 @@ class BaseBO:
         self.bounds = torch.stack([lower, upper], dim=0)
 
     def set_ref_point(self, slack) -> torch.Tensor:
-        """Automatically determine a reference point for hyper-volume calculation.
-
-        The reference point is calculated as the minimum observed value for each objective
-        minus a slack value, used in multi-objective optimization.
-
-        Args:
-            slack: Slack value to subtract from the minimum observed values.
-                   Can be a scalar (same for all objectives) or array-like of length objective_dim
-
-        Returns:
-            torch.Tensor: The calculated reference point with shape [objective_dim]
-
-        Raises:
-            AssertionError: If Y is empty (no training data available)
-        """
+        """ref_point"""
         # Ensure we have training data to calculate minimum values
         assert self.Y.numel() > 0, "No training data available - add data before setting reference point"
 
@@ -252,15 +241,31 @@ class BaseBO:
         # Ensure model is built
         self.build_model()
 
-        # Run BO to get next points
-        X_next = run_multitask_bo(
-            model=self.model,
-            bounds=self.bounds,
-            train_y=self.Y,
-            ref_point=self.ref_point,
-            batch_size=self.batch_size,
-            mini_batch_size=self.mini_batch_size,
-            device=self.device
-        )
+        # Determine which data to use for BO
+        y_bo = self.Y
+
+        # Run appropriate BO algorithm based on objective type
+        if self._is_single_task:
+            # Single-objective optimization using qlogEI acquisition
+            X_next = run_singletask_bo(
+                model=self.model,
+                bounds=self.bounds,
+                train_y=y_bo,
+                batch_size=self.batch_size,
+                mini_batch_size=self.mini_batch_size,
+                device=self.device
+            )
+        else:
+            # Multi-objective optimization using qlogEHVI acquisition
+            X_next = run_multitask_bo(
+                model=self.model,
+                bounds=self.bounds,
+                train_y=y_bo,
+                ref_point=self.ref_point,
+                batch_size=self.batch_size,
+                mini_batch_size=self.mini_batch_size,
+                device=self.device
+            )
+
         print(X_next)
         return X_next

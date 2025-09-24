@@ -41,6 +41,14 @@ input_dim = 5  # Number of input dimensions (e.g., processing parameters to opti
 objective_dim = 1  # Dimension of the optimization target (1 for single-objective cost function)
 # Note: This matches the output dimension of the cost function, not the raw objectives
 
+# IF objective_dim = 1:
+#   we need cost function at the top of this file, but don't need slack (don't need reference point)
+# ELSE objective_dim > 1:
+#   need slack (don't need reference point)
+#   Slack for setting reference points
+slack = 0.1  # set same slack for each dimension
+# or slack = [0.1, 0.2, 0.3, 0.1, 0.5]  # set different slack for each dimension
+
 batch_size = 20  # Number of candidate points to generate in each BO iteration
 
 # Parameter bounds for the optimization space
@@ -88,11 +96,16 @@ if has_sample:
         y_cols=target_data_clm_name
     )
 
-    # Convert raw objectives to cost metric using the cost function
-    Y_target_cost = cost_func(Y_target_initial)
+    if objective_dim == 1:
+        # Convert raw objectives to cost metric using the cost function
+        Y_target_cost = cost_func(Y_target_initial)
+        warm_start_BO.add_data(X_target_initial, Y_target_cost)
 
-    # Add target data to BO (uses base class's add_data method)
-    warm_start_BO.add_data(X_target_initial, Y_target_cost)
+    else:
+        # Multi-task BO
+        Y_target_cost = Y_target_initial
+        warm_start_BO.add_data(X_target_initial, Y_target_cost)
+        warm_start_BO.set_ref_point(slack)
 
 # Load source task data for warm start
 X_src, Y_src = read_data(
@@ -103,8 +116,11 @@ X_src, Y_src = read_data(
     y_cols=source_data_clm_name
 )
 
-# Convert source objectives to cost metric
-Y_src_cost = cost_func(Y_src)
+if objective_dim == 1:
+    # Convert source objectives to cost metric
+    Y_src_cost = cost_func(Y_src)
+else:
+    Y_src_cost = Y_src
 
 # Add source data to warm start BO
 warm_start_BO.add_source_data(X_src, Y_src_cost)

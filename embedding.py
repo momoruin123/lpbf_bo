@@ -24,7 +24,7 @@ def cost_func(y) -> torch.Tensor:
         y = torch.as_tensor(y).unsqueeze(0)
     y = torch.as_tensor(y)
 
-    # Normalize objectives to [0, 1] range
+    # Normalize objectives to [0, 1] range for consistent weighting
     y_normalized = normalize_tensor(y)
 
     # -------- Modify this section for your specific cost function --------
@@ -32,7 +32,7 @@ def cost_func(y) -> torch.Tensor:
     f = 0.5 * y_normalized[:, 0] + 0.5 * y_normalized[:, 1]
     # ---------------------------------------------------------------------
 
-    return f.unsqueeze(-1)  # Ensure output shape is (n_samples, 1)
+    return f.unsqueeze(-1)  # Ensure output shape matches BO's expected format
 
 
 # ======== Configuration parameters ========
@@ -41,11 +41,20 @@ input_dim = 5  # Number of input dimensions (e.g., processing parameters to opti
 objective_dim = 1  # Dimension of the optimization target (1 for single-objective cost function)
 # Note: This represents the output dimension of the BO process (matches cost function output)
 
+# IF objective_dim = 1:
+#   we need cost function at the top of this file, but don't need slack (don't need reference point)
+# ELSE objective_dim > 1:
+#   need slack (don't need reference point)
+#   Slack for setting reference points
+slack = 0.1  # set same slack for each dimension
+# or slack = [0.1, 0.2, 0.3, 0.1, 0.5]  # set different slack for each dimension
+
 batch_size = 20  # Number of candidate points to generate in each BO iteration
 
 # Embedding feature vectors (task-specific features)
 v_src_1 = [1, 0]  # Feature vector representing source task 1
 # v_src_2 = [];  # Uncomment to add more source tasks
+# v_src_3 = [];
 v_trg = [0.6, 10.8]  # Feature vector representing target task
 
 # Parameter bounds for optimization (input parameters + fixed target feature vector)
@@ -70,7 +79,6 @@ target_data_clm_name = None  # Column names for target data (None uses default o
 # Reduce mini_batch_size if encountering memory issues (especially for multi-objective cases)
 minibatch_size = batch_size  # Typically matches batch_size unless memory constraints exist
 
-
 # ======== Initialize and configure Embedding BO ========
 # Create EmbeddingBO instance with input, objective, and embedding dimensions
 embedding_BO = embedding_bo_class.EmbeddingBO(
@@ -82,7 +90,6 @@ embedding_BO = embedding_bo_class.EmbeddingBO(
 # Set parameter bounds and batch sizes
 embedding_BO.set_bounds(lower_bounds, upper_bounds)
 embedding_BO.set_batch_size(batch_size, minibatch_size)
-
 
 # ======== Load initial data ========
 # Load target task data if available
@@ -96,15 +103,16 @@ if has_sample:
         y_cols=target_data_clm_name
     )
 
-    # Convert raw objectives to cost metric using cost function
-    Y_target_cost = cost_func(Y_target_initial)
+    if objective_dim == 1:
+        # Convert raw objectives to cost metric using the cost function
+        Y_target_cost = cost_func(Y_target_initial)
+        embedding_BO.add_augment_data(X_target_initial, Y_target_cost, v=v_trg)
 
-    # Add augmented data (input parameters + target feature vector) to BO
-    embedding_BO.add_augment_data(
-        X_new=X_target_initial,
-        Y_new=Y_target_cost,
-        v=v_trg
-    )
+    else:
+        # Multi-task BO
+        Y_target_cost = Y_target_initial
+        embedding_BO.add_augment_data(X_target_initial, Y_target_cost, v=v_trg)
+        embedding_BO.set_ref_point(slack)
 
 # Load source task data
 # ---------------------------- Modify for your source tasks ----------------------------
@@ -118,7 +126,10 @@ X_src_1, Y_src_1 = read_data(
 )
 
 # Convert source task objectives to cost metric
-Y_src_1_cost = cost_func(Y_src_1)
+if objective_dim == 1:
+    Y_src_1_cost = cost_func(Y_src_1)
+else:
+    Y_src_1_cost = Y_src_1
 
 # Add augmented source data (input parameters + source feature vector)
 embedding_BO.add_augment_data(
@@ -129,14 +140,15 @@ embedding_BO.add_augment_data(
 
 # Uncomment to add additional source tasks
 # X_src_2, Y_src_2 = read_data(data_dim[0], data_dim[1], source_2_data_path)
-# Y_src_2_cost = cost_func(Y_src_2)
+# if objective_dim == 1:
+#     Y_src_2_cost = cost_func(Y_src_2)
+# else:
+#     Y_src_2_cost = Y_src_2
 # embedding_BO.add_augment_data(X_src_2, Y_src_2_cost, v_src_2)
-
 
 # ======== Run Bayesian Optimization ========
 # Generate next set of candidate points to evaluate
 X_next = embedding_BO.run_bo()
-
 
 # ======== Save results ========
 # Save the recommended candidate points to CSV
